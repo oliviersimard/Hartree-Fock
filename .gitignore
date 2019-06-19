@@ -1,3 +1,4 @@
 *.jl
 !*HF*.jl
 !Precompile.jl
+*.dat
