@@ -1,4 +1,5 @@
 *.jl
 !*HF*.jl
 !Precompile.jl
+!Main_Hubbard.jl
 *.dat
