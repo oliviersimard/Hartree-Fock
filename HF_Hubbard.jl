@@ -70,12 +70,12 @@ function initGk(kk::Union{Float64,Array{Float64,1}}, qq::Union{Float64,Array{Flo
     initGkTemp = Matrix{Complex{Float64}}(undef,(2,2)) ## Spin degrees of freedom 
     if isa(kk,Float64) && isa(qq,Float64)
         initGkTemp[1,1] = 1.0/(iωn - epsilonk(kk) - (0.1-0.0im)) ## Setting initial self-energy slightly different between spin components 
-        initGkTemp[2,2] = 1.0/(iωn - epsilonk(kk) - (0.11-0.0im))
+        initGkTemp[2,2] = 1.0/(iωn - epsilonk(kk) - (0.15-0.0im))
         initGkTemp[1,2] = initGkTemp[2,1] = 0.0 + 0.0im
     elseif isa(qq,Array{Float64,1}) && isa(kk,Array{Float64,1})
         kx, ky = kk; qx, qy = qq
         initGkTemp[1,1] = 1.0/(iωn - epsilonk(kx, ky) - (0.1-0.0im))
-        initGkTemp[2,2] = 1.0/(iωn - epsilonk(kx, ky) - (0.11-0.0im))
+        initGkTemp[2,2] = 1.0/(iωn - epsilonk(kx, ky) - (0.15-0.0im))
         initGkTemp[1,2] = initGkTemp[2,1] = 0.0 + 0.0im
     else
         throw(ErrorException("Not a type handled. Check initGk function!"))
