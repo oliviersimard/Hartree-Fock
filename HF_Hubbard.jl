@@ -160,7 +160,15 @@ function integrateComplex(funct::N, SE_funct::Matrix{Complex{Float64}}, ii::Int6
 
     temp_func = (KK::Complex{Float64}) -> (result_real(KK) + 1.0im*result_imag(KK))
 
-    return temp_func
+    tmp_self = Matrix{Complex{Float64}}(undef,(2,2))
+    
+    for iωn in structModel.matsubara_grid_
+        tmp_self += 1/2*II + (2.0/structModel.beta_)*real.(tmp_self(iωn))
+    end
+
+    tmp_self = swap(tmp_self)
+
+    return tmp_self
 end
 
 function interationProcess(structModel::HubbardStruct, BoundArr::Union{Array{Float64,1},Array{Array{Float64,1},1}}, SubLast::Int64; Gridk::Int64=80, opt::String="sum")
@@ -174,9 +182,6 @@ function interationProcess(structModel::HubbardStruct, BoundArr::Union{Array{Flo
             if it <= 1
                 for sub in 1:SubLast
                     println(it, " interation_process 1D")
-                    to_add_lower = (convert(Float64,sub)-1.)*2.0*pi/SubLast
-                    to_add_upper = (convert(Float64,sub))*2.0*pi/SubLast
-                    BoundArr = Array{Float64,1}([-pi+to_add_lower,-pi+to_add_upper])
                     println("it: ", it, "BoundArr1D: ", BoundArr)
                     push!(Funct_array, integrateComplex(initGk, x -> x, it, structModel, BoundArr, Gridk=Gridk, opt=opt))
                 end
