@@ -143,12 +143,12 @@ function integrateComplex1D(funct::N, SE_funct::Matrix{Complex{Float64}}, ii::In
     tmp_self = Matrix{Complex{Float64}}(undef,(2,2))
     
     for iωn in structModel.matsubara_grid_
-        tmp_self += 1/2*II + (2.0/structModel.beta_)*real.(temp_func(iωn))
+        tmp_self += real.(temp_func(iωn))
     end
     
     tmp_self = swap(tmp_self) ## Have to swap to have Σ_up = U*n_down
 
-    return (1.0/structModel.beta_)*tmp_self
+    return (2.0/structModel.beta_)*tmp_self + 1/2*II 
 end
 
 end ## End module Hubbard

@@ -16,7 +16,7 @@ Dims = 1
 Grid_K = 300
 ##
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
-N_it = 40 ## Lowest number is 1: one loop in the process
+N_it = 100 ## Lowest number is 1: one loop in the process
 Full = false ## If you want to compute the results of all the iterations, set to true. Set to false otherwise!
 
 
@@ -110,7 +110,7 @@ if Dims == 1
             @time for (ii,iωn) in enumerate(model.matsubara_grid_)
                 f = open(filename, "a")
                 if ii == 1
-	                write(f, "#N_it "*"$(N_it)"*" q="*"$(q)"*"Gridk "*"$(Grid_K)"*"\n")
+	                write(f, "#N_it "*"$(N_it)"*" q="*"$(q)"*" Gridk "*"$(Grid_K)"*"\n")
                 end
                 k_sum = 0.0+0.0im
                 println("iwn: ", iωn)
