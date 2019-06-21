@@ -75,7 +75,7 @@ function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral
         end
         summation_subs = sum(c_container)
         
-        Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk(vals.kx)*SuperHF.Hubbard.II - summation_subs)
+        Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk(vals.qx)*SuperHF.Hubbard.II - summation_subs)
         
         return Gk
     end
