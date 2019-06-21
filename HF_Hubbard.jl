@@ -2,13 +2,9 @@ module Hubbard
 
 using QuadGK
 using Cubature: hcubature
-using Parameters: @unpack
+#sing Parameters: @unpack
 
 II = Matrix{Float64}([1.0 0.0; 0.0 1.0])
-
-macro assert(ex)
-    return :( $ex ? nothing : throw(AssertionError("OUPS: "*$(string(ex)))) )
-end
 
 abstract type MyType{N} end
 struct Integral2D <: MyType{2}
