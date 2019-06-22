@@ -4,13 +4,14 @@
 
 ## Some important parameters
 dict = Dict{String,Float64}("U" => 4.0, "V" => 1.0)
-beta = 100 
+beta = 200 # For 1D, beta = 100 and Niωn = 50 seems to converge well. For 1D, opt = "integral" gives results fast enough.
+           # For 2D, beta = 200 and Niωn = 50 seems to stabilize efficiently the convergence loop. For 2D, opt = "sum" should be specified. (Incresing gap between beta > Niωn)
 Niωn = 50 ## Niωn should absolutely be lower than beta value.
 Dims = 2
-Grid_K = 300
+Grid_K = 400
 ##
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
-N_it = 10 ## Lowest number is 1: one loop in the process
+N_it = 5 ## Lowest number is 1: one loop in the process. Converges faster for 2D (~15 iterations) while for 1D slower (~30 iterations).
 Full = false ## If you want to compute the results of all the iterations, set to true. Set to false otherwise!
 
 filename = "$(Dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn).dat"
@@ -34,7 +35,7 @@ end
 
 
 function iterationProcess(structModel::SuperHF.Hubbard.HubbardStruct, BoundArr::Union{Array{Float64,1}, Array{Array{Float64,1},1}}; 
-    SubLast::Int64=SubLast, Gridk::Int64=80, opt::String="sum")
+    SubLast::Int64=SubLast, Gridk::Int64=100, opt::String="sum")
     @assert (isa(BoundArr,Array{Array{Float64,1},1}) || isa(BoundArr,Array{Float64,1})) "Only treats the 1D and 2D cases for now! Check iterationProcess(...)."
     N_it = structModel.N_it_
     SE_funct = missing
@@ -61,7 +62,7 @@ function iterationProcess(structModel::SuperHF.Hubbard.HubbardStruct, BoundArr::
             Funct_array = Array{Array{Complex{Float64},2},1}([]) ## SubLast has got to be devided in two, because there are two boundaries.
             if it <= 1
                 dummyMatrix = Matrix{Complex{Float64}}(undef,(2,2))
-                println(it, " iteration_process 2D ", "Boundaries2D: ", BoundArr)
+                println(it, " iteration_process 2D ", "Boundaries2D: ", BoundArr[1][1], " ", Gridk, " ", BoundArr[2][1])
                 push!(Funct_array, SuperHF.Hubbard.integrateComplex(SuperHF.Hubbard.initGk, dummyMatrix, it, structModel, BoundArr, Gridk=Gridk, opt=opt))
             elseif it > 1
                 println(it, " iteration_process 2D ", "Boundaries2D: ", BoundArr)
@@ -99,7 +100,7 @@ function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral
         
         return Gk
     elseif isa(vals, SuperHF.Hubbard.Integral2D)
-        println("In gk_conv 2D")
+        #println("In gk_conv 2D")
         for idx in 1:div(SubLast,2)
             c_container[idx] = dictFunct[N_it][idx]
         end
@@ -111,7 +112,7 @@ end
 
 function Lambda(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
     Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D})
-    println("IN LAMBDA FUNCTION", "\n")
+    #println("IN LAMBDA FUNCTION", "\n")
 
     kernel = inv( 1 - dict["U"]*Gk_conv(Gk1)[1,1]*Gk_conv(Gk2)[2,2] )
 
@@ -121,13 +122,14 @@ end
 
 function Susceptibility(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
     Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, Gks::Union{Array{SuperHF.Hubbard.Integral1D,1},Array{SuperHF.Hubbard.Integral2D,1}})
-    println("IN SUSCEPTIBILITY FUNCTION", "\n")
+    #println("IN SUSCEPTIBILITY FUNCTION", "\n")
     sus = Gk_conv(Gks[1])[1,1]*dict["U"]*Lambda(HF,Gk1,Gk2)*Gk_conv(Gks[2])[2,2]*Gk_conv(Gks[3])[2,2]*Gk_conv(Gks[4])[1,1]
 
     #println("Susceptibility: ", sus, "\n\n")
     return sus
 end
 
+### Main 
 c_container = Vector{Array{Complex{Float64},2}}(undef,div(SubLast,2))
 if Dims == 1
     dictFunct = iterationProcess(model, Boundaries1D, Gridk=Grid_K, opt="integral")
@@ -192,11 +194,11 @@ elseif Dims == 2
                 k_sum = 0.0+0.0im
                 println("iwn: ", iωn)
                 for qp in qp_array2D
-                    println("In qp: ", qp)
+                    #println("In qp: ", qp)
                     for k in k_array2D
-                        println("In k: ", k)
+                        #println("In k: ", k)
                         for kp in kp_array2D
-                            println("In kp: ", kp)
+                            #println("In kp: ", kp)
                             Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], iωn)
                             Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+q[2], iωn)
                             Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], iωn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-q[2], iωn)

@@ -80,7 +80,6 @@ function initGk(kk::Union{Float64,Array{Float64,1}}, qq::Union{Float64,Array{Flo
         throw(ErrorException("Not a type handled. Check initGk function!"))
         exit()
     end
-    println("YOYO: ", initGkTemp)
 
     return initGkTemp
 end
@@ -106,7 +105,6 @@ function FunctWrapper1D(funct::Function, other::Complex{Float64})
 end
 
 function FunctWrapper2D(funct::Function, other::Complex{Float64})
-    println("yo!")
     function Inner_funct(k::Array{Float64,1})
         return funct(k, other)
     end
@@ -114,7 +112,8 @@ function FunctWrapper2D(funct::Function, other::Complex{Float64})
     return Inner_funct
 end
 
-function integrateComplex(funct::N, SE_funct::Matrix{Complex{Float64}}, ii::Int64, structModel::HubbardStruct, BoundArr::Union{Array{Float64,1},Array{Array{Float64,1},1}}; Gridk::Int64=80, opt::String="sum") where {N<:Function}
+function integrateComplex(funct::N, SE_funct::Matrix{Complex{Float64}}, ii::Int64, structModel::HubbardStruct, BoundArr::Union{Array{Float64,1},Array{Array{Float64,1},1}}; 
+    Gridk::Int64=80, opt::String="sum") where {N<:Function}
     U = structModel.dict_["U"]
     if isa(BoundArr,Array{Float64,1})
         if ii <= 1
@@ -135,19 +134,19 @@ function integrateComplex(funct::N, SE_funct::Matrix{Complex{Float64}}, ii::Int6
     end
 
     function real_funct(kx::Float64, iωn::Complex{Float64})
-        return real(dressed_funct(kx, 0.0, iωn))
+        return real.(dressed_funct(kx, 0.0, iωn))
     end
 
     function real_funct(kk::Array{Float64,1}, iωn::Complex{Float64})
-        return real(dressed_funct(kk, [0.0,0.0], iωn))
+        return real.(dressed_funct(kk, [0.0,0.0], iωn))
     end
 
     function imag_funct(kx::Float64, iωn::Complex{Float64})
-        return imag(dressed_funct(kx, 0.0, iωn))
+        return imag.(dressed_funct(kx, 0.0, iωn))
     end
 
     function imag_funct(kk::Array{Float64,1}, iωn::Complex{Float64})
-        return imag(dressed_funct(kk, [0.0,0.0], iωn))
+        return imag.(dressed_funct(kk, [0.0,0.0], iωn))
     end
 
     @assert opt == "sum" || opt == "integral"
@@ -164,24 +163,25 @@ function integrateComplex(funct::N, SE_funct::Matrix{Complex{Float64}}, ii::Int6
             result_real = (remaining_var::Complex{Float64}) -> 2.0*(2.0*pi)^(-2.0)*hcubature(FunctWrapper2D(real_funct,remaining_var), BoundArr[1], BoundArr[2]; reltol=1.5e-4, abstol=1.5e-4, maxevals=100_000)[1]
             result_imag = (remaining_var::Complex{Float64}) -> 2.0*(2.0*pi)^(-2.0)*hcubature(FunctWrapper2D(imag_funct,remaining_var), BoundArr[1], BoundArr[2]; reltol=1.5e-4, abstol=1.5e-4, maxevals=100_000)[1]
         elseif opt == "sum"
-            println("Yo!")
             function result_real(remaining_var::Complex{Float64})
                 tmpMat = Matrix{Complex{Float64}}(undef,(2,2))
-                for ky in BoundArr[1][1]:Gridk:BoundArr[2][1]
-                    for kx in BoundArr[1][2]:Gridk:BoundArr[2][2]
-                        tmpMat .+= 2.0*(Gridk)^(-2.0)*real_funct([ky,kx],remaining_var)
+                for ky in range(BoundArr[1][1], stop=BoundArr[2][1], length=Gridk)
+                    for kx in range(BoundArr[1][2], stop=BoundArr[2][2], length=Gridk)
+                        #println("real_funct: ", real_funct([ky,kx],remaining_var))
+                        tmpMat .+= real_funct([ky,kx],remaining_var)
                     end
                 end
-                return tmpMat
+                return 2.0*(Gridk)^(-2.0)*tmpMat
             end
             function result_imag(remaining_var::Complex{Float64})
                 tmpMat = Matrix{Complex{Float64}}(undef,(2,2)) 
-                for ky in BoundArr[1][1]:Gridk:BoundArr[2][1]
-                    for kx in BoundArr[1][2]:Gridk:BoundArr[2][2]
-                        tmpMat .+= 2.0*(Gridk)^(-2.0)*imag_funct([ky,kx],remaining_var)
+                for ky in range(BoundArr[1][1], stop=BoundArr[2][1], length=Gridk)
+                    for kx in range(BoundArr[1][2], stop=BoundArr[2][2], length=Gridk)
+                        #println("imag_funct: ", imag_funct([ky,kx],remaining_var))
+                        tmpMat .+= imag_funct([ky,kx],remaining_var)
                     end
                 end
-                return tmpMat
+                return 2.0*(Gridk)^(-2.0)*tmpMat
             end
         end
     end
@@ -191,7 +191,6 @@ function integrateComplex(funct::N, SE_funct::Matrix{Complex{Float64}}, ii::Int6
     tmp_self = Matrix{Complex{Float64}}(undef,(2,2))
     
     for iωn in structModel.matsubara_grid_
-        println("Here")
         tmp_self += real.(temp_func(iωn))
     end
     
