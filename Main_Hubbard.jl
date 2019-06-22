@@ -8,7 +8,7 @@ beta = 200 # For 1D, beta = 100 and Niωn = 50 seems to converge well. For 1D, o
            # For 2D, beta = 200 and Niωn = 50 seems to stabilize efficiently the convergence loop. For 2D, opt = "sum" should be specified. (Incresing gap between beta > Niωn)
 Niωn = 50 ## Niωn should absolutely be lower than beta value.
 Dims = 2
-Grid_K = 400
+Grid_K = 200 ## Grid_K = 400 for 2D, as example! 2D case needs parallelization!!
 ##
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
 N_it = 5 ## Lowest number is 1: one loop in the process. Converges faster for 2D (~15 iterations) while for 1D slower (~30 iterations).
@@ -194,9 +194,9 @@ elseif Dims == 2
                 k_sum = 0.0+0.0im
                 println("iwn: ", iωn)
                 for qp in qp_array2D
-                    #println("In qp: ", qp)
+                    println("In qp: ", qp)
                     for k in k_array2D
-                        #println("In k: ", k)
+                        println("In k: ", k)
                         for kp in kp_array2D
                             #println("In kp: ", kp)
                             Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], iωn)
