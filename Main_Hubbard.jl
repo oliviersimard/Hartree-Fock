@@ -6,7 +6,7 @@
 dict = Dict{String,Float64}("U" => 4.0, "V" => 1.0)
 beta = 100 
 Niωn = 50 ## Niωn should absolutely be lower than beta value.
-Dims = 1
+Dims = 2
 Grid_K = 300
 ##
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
@@ -111,7 +111,7 @@ end
 
 function Lambda(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
     Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D})
-    #println("IN LAMBDA FUNCTION", "\n")
+    println("IN LAMBDA FUNCTION", "\n")
 
     kernel = inv( 1 - dict["U"]*Gk_conv(Gk1)[1,1]*Gk_conv(Gk2)[2,2] )
 
@@ -121,7 +121,7 @@ end
 
 function Susceptibility(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
     Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, Gks::Union{Array{SuperHF.Hubbard.Integral1D,1},Array{SuperHF.Hubbard.Integral2D,1}})
-    #println("IN SUSCEPTIBILITY FUNCTION", "\n")
+    println("IN SUSCEPTIBILITY FUNCTION", "\n")
     sus = Gk_conv(Gks[1])[1,1]*dict["U"]*Lambda(HF,Gk1,Gk2)*Gk_conv(Gks[2])[2,2]*Gk_conv(Gks[3])[2,2]*Gk_conv(Gks[4])[1,1]
 
     #println("Susceptibility: ", sus, "\n\n")
@@ -177,7 +177,7 @@ if Dims == 1
         return nothing
     end
 elseif Dims == 2
-    dictFunct = iterationProcess(model, Boundaries2D, Gridk=Grid_K, opt="integral")
+    dictFunct = iterationProcess(model, Boundaries2D, Gridk=Grid_K, opt="sum")
     println("Length of function array: ", length(dictFunct[N_it]))
     function main()
         try
@@ -192,14 +192,14 @@ elseif Dims == 2
                 k_sum = 0.0+0.0im
                 println("iwn: ", iωn)
                 for qp in qp_array2D
-                    #println("In qp: ", qp)
+                    println("In qp: ", qp)
                     for k in k_array2D
-                        #println("In k: ", k)
+                        println("In k: ", k)
                         for kp in kp_array2D
-                            #println("In kp: ", kp)
-                            Gk1 = SuperHF.Hubbard.Integral1D(k[1], k[2], iωn); Gk2 = SuperHF.Hubbard.Integral1D(kp[1]+qp[1], kp[2]+qp[2], iωn)
-                            Gks1 = SuperHF.Hubbard.Integral1D(k[1], k[2], iωn); Gks2 = SuperHF.Hubbard.Integral1D(kp[1]+q[1], kp[2]+q[2], iωn)
-                            Gks3 = SuperHF.Hubbard.Integral1D(kp[1], kp[2], iωn); Gks4 = SuperHF.Hubbard.Integral1D(k[1]-q[1], k[2]-q[2], iωn)
+                            println("In kp: ", kp)
+                            Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], iωn)
+                            Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+q[2], iωn)
+                            Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], iωn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-q[2], iωn)
                             Matsubara_sus = Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4])
                             k_sum += Matsubara_sus
                         end
