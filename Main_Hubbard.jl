@@ -98,7 +98,6 @@ function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral
         
         Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk(vals.qx)*SuperHF.Hubbard.II - summation_subs)
         
-        return Gk
     elseif isa(vals, SuperHF.Hubbard.Integral2D)
         #println("In gk_conv 2D")
         for idx in 1:div(SubLast,2)
@@ -108,6 +107,8 @@ function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral
         
         Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk([vals.qx, vals.qy])*SuperHF.Hubbard.II - summation_subs)
     end
+
+    return Gk
 end
 
 function Lambda(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
