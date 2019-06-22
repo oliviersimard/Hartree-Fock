@@ -11,9 +11,8 @@ Dims = 2
 Grid_K = 200 ## Grid_K = 400 for 2D, as example! 2D case needs parallelization!!
 ##
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
-N_it = 5 ## Lowest number is 1: one loop in the process. Converges faster for 2D (~15 iterations) while for 1D slower (~30 iterations).
-Full = false ## If you want to compute the results of all the iterations, set to true. Set to false otherwise!
-Precomputation_enabled = false
+N_it = 20 ## Lowest number is 1: one loop in the process. Converges faster for 2D (~15 iterations) while for 1D slower (~30 iterations).
+Precomputation_enabled = true ## Has effect only when Dims = 2.
 
 filename = "$(Dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn).dat"
 
@@ -32,6 +31,18 @@ function integrateComplex1DWrapper(SE_funct::Function, ii::Int64, structModel::S
         return SuperHF.Hubbard.integrateComplex(funct::Function, SE_funct, ii, structModel, BoundArr, Gridk, opt)
     end
     return tmp_funct
+end
+
+function custom_mod(num::Int64) ## Useful for the case where one precomputes the k-space values of the dispersion relation. (starting indice is 1 unfortunately!)
+    tmpNum = num ## Can't modify content of struct, because immutable!!!
+    if mod(num,Grid_K+1) == 0
+        tmpNum = 1
+    end
+    if num < 0 || num > Grid_K+1
+        tmpNum = mod(num,Grid_K+1) + 1
+    end
+
+    return tmpNum
 end
 
 
@@ -91,11 +102,11 @@ if !Precomputation_enabled
     qp_array2D = Array{Array{Float64,1},1}([[a,b] for a in range(-pi,stop=pi,length=Grid_K) for b in range(-pi,stop=pi,length=Grid_K)])
     qpp_array2D = qp_array2D; k_array2D = qp_array2D; kp_array2D = qp_array2D
 else
-    qp_array2D = Array{Array{Float64,1},1}([[a,b] for a in range(1,stop=Grid_K,length=Grid_K) for b in range(1,stop=Grid_K,length=Grid_K)])
+    qp_array2D = Array{Array{Int64,1},1}([[a,b] for a in range(1,stop=Grid_K,length=Grid_K) for b in range(1,stop=Grid_K,length=Grid_K)])
     qpp_array2D = qp_array2D; k_array2D = qp_array2D; kp_array2D = qp_array2D
 end
 
-function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral1D}; precomputedKSpace::Matrix{Float64}=missing)
+function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral1D}; precomputedKSpace=missing)
     if isa(vals, SuperHF.Hubbard.Integral1D)
         #println("In gk_conv 1D")
         for idx in 1:div(SubLast,2)
@@ -113,16 +124,17 @@ function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral
         summation_subs = sum(c_container)
         
         if !Precomputation_enabled
-            Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk([vals.qx, vals.qy])*SuperHF.Hubbard.II - summation_subs) ## Supposing dispersion relation is same for all spin projections
+            Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk([vals.qx,vals.qy])*SuperHF.Hubbard.II - summation_subs) ## Supposing dispersion relation is same for all spin projections
         else
-            Gk = inv(vals.iωn*SuperHF.Hubbard.II - precomputedKSpace[vals.qy,vals.qx]*SuperHF.Hubbard.II - summation_subs)
+            @assert (!isequal(missing,precomputedKSpace)) "The value of precomputedKSpace should take another value as input, i.e. Matrix{Float64}."
+            Gk = inv(vals.iωn*SuperHF.Hubbard.II - precomputedKSpace[custom_mod(vals.qy),custom_mod(vals.qx)]*SuperHF.Hubbard.II - summation_subs)
         end
     end
     return Gk
 end
 
 function Lambda(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
-    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}; precomputedKSpace::Matrix{Float64}=missing)
+    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}; precomputedKSpace=missing)
     #println("IN LAMBDA FUNCTION", "\n")
 
     kernel = inv( 1 - dict["U"]*Gk_conv(Gk1,precomputedKSpace=precomputedKSpace)[1,1]*Gk_conv(Gk2,precomputedKSpace=precomputedKSpace)[2,2] )
@@ -132,7 +144,7 @@ function Lambda(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.In
 end
 
 function Susceptibility(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
-    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, Gks::Union{Array{SuperHF.Hubbard.Integral1D,1},Array{SuperHF.Hubbard.Integral2D,1}}; precomputedKSpace::Matrix{Float64}=missing)
+    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, Gks::Union{Array{SuperHF.Hubbard.Integral1D,1},Array{SuperHF.Hubbard.Integral2D,1}}; precomputedKSpace=missing)
     #println("IN SUSCEPTIBILITY FUNCTION", "\n")
     sus = Gk_conv(Gks[1],precomputedKSpace=precomputedKSpace)[1,1]*dict["U"]*Lambda(HF,Gk1,Gk2,precomputedKSpace=precomputedKSpace)*Gk_conv(Gks[2],precomputedKSpace=precomputedKSpace)[2,2]*Gk_conv(Gks[3],precomputedKSpace=precomputedKSpace)[2,2]*Gk_conv(Gks[4],precomputedKSpace=precomputedKSpace)[1,1]
 
@@ -196,7 +208,6 @@ elseif Dims == 2
         try
             @assert isa(dictFunct,Dict{Int64,Array{Array{Complex{Float64},2},1}}) "Dictionnary holding self-energies must have a given form. Look inside main function."
             Matsubara_array_susceptibility = Array{Complex{Float64},1}()
-            q = [0.,0.]
             @time for (ii,iωn) in enumerate(model.matsubara_grid_)
                 f = open(filename, "a")
                 if ii == 1
@@ -205,6 +216,7 @@ elseif Dims == 2
                 k_sum = 0.0+0.0im
                 println("iwn: ", iωn)
                 if !Precomputation_enabled
+                    q = [0.,0.]
                     for qp in qp_array2D
                         println("In qp: ", qp)
                         for k in k_array2D
@@ -224,11 +236,12 @@ elseif Dims == 2
                     write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
                     close(f)
                 else
+                    q = [0,0] ## Doesn't change the indices if q = [0.0,0.0] previously!!!
                     bigMat = SuperHF.Hubbard.BigKArray(SuperHF.Hubbard.epsilonk1, Boundaries2D, Grid_K)
                     for qp in qp_array2D
-                        #println("In qp: ", qp)
+                        println("In qp: ", qp)
                         for k in k_array2D
-                            #println("In k: ", k)
+                            println("In k: ", k)
                             for kp in kp_array2D
                                 #println("In kp: ", kp)
                                 Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], iωn)
@@ -252,7 +265,7 @@ elseif Dims == 2
             if typeof(err) == InterruptException
                 println("ALL THE TASKS HAVE BEEN INTERRUPTED","\n")
             else
-                println("$(err)")
+                println(typeof(err))
             end
         end
         println("Program terminated. Have a nice day!")

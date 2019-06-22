@@ -3,7 +3,7 @@ module Hubbard
 using QuadGK
 using Cubature: hcubature
 
-t_ = 0.0; tp_ = -0.3; tpp_ = 0.2
+t_ = 1.0; tp_ = -0.3; tpp_ = 0.2
 
 II = Matrix{Float64}([1.0 0.0; 0.0 1.0])
 
@@ -77,7 +77,6 @@ function epsilonk(kk::Union{Float64,Array{Float64,1}}; t::Float64=t_, tp::Float6
         throw(ErrorException("Not a type handled. Check epsilonk function!"))
         exit()
     end
-
 end
 
 function BigKArray(funct::Function, Boundaries::Array{Array{Float64,1},1}, Gridk::Int64; t::Float64=t_, tp::Float64=tp_, tpp::Float64=tpp_)
@@ -137,7 +136,7 @@ function FunctWrapper2D(funct::Function, other::Complex{Float64})
 end
 
 function integrateComplex(funct::N, SE_funct::Matrix{Complex{Float64}}, ii::Int64, structModel::HubbardStruct, BoundArr::Union{Array{Float64,1},Array{Array{Float64,1},1}}; 
-    Gridk::Int64=80, opt::String="sum") where {N<:Function}
+    Gridk::Int64=100, opt::String="sum") where {N<:Function}
     U = structModel.dict_["U"]
     if isa(BoundArr,Array{Float64,1})
         if ii <= 1
