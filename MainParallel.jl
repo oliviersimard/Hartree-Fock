@@ -210,6 +210,7 @@ elseif Dims == 2
         try
             @assert isa(dictFunct,Dict{Int64,Array{Array{Complex{Float64},2},1}}) "Dictionnary holding self-energies must have a given form. Look inside main function."
             Matsubara_array_susceptibility = Array{Complex{Float64},1}()
+            q = [0.,0.]
             @time for (ii,iωn) in enumerate(model.matsubara_grid_)
                 f = open(filename, "a")
                 if ii == 1
@@ -218,7 +219,6 @@ elseif Dims == 2
                 k_sum = 0.0+0.0im
                 println("iwn: ", iωn)
                 if !Precomputation_enabled
-                    q = [0.,0.]
                     for qp in qp_array2D
                         println("In qp: ", qp)
                         for k in k_array2D
@@ -261,7 +261,7 @@ elseif Dims == 2
                 end
             end
             tot_susceptibility = (2.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
-            println("total Susceptibility: ", tot_susceptibility)
+            println("total Susceptibility for q = $(q): ", tot_susceptibility)
             f = open(filename, "a")
             write(f, "\n"*"total susceptibility: "*"$(tot_susceptibility)"*"\n")
             close(f)
@@ -270,6 +270,7 @@ elseif Dims == 2
                 println("ALL THE TASKS HAVE BEEN INTERRUPTED","\n")
             else
                 println(typeof(err))
+                println(err)
             end
         end
         println("Program terminated. Have a nice day!")
