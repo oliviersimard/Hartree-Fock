@@ -190,7 +190,9 @@ if Dims == 1
             end
             tot_susceptibility = (2.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
             println("total Susceptibility for q = $(q): ", tot_susceptibility)
-            return tot_susceptibility
+            f = open(filename, "a")
+            write(f, "\n"*"total susceptibility: "*"$(tot_susceptibility)"*"\n")
+            close(f)
         catch err
             if typeof(err) == InterruptException
                 println("ALL THE TASKS HAVE BEEN INTERRUPTED","\n")
@@ -252,15 +254,17 @@ elseif Dims == 2
                             end
                         end
                     end
-                    k_sum = 2.0*(1.0/(Grid_K))^3*k_sum ## 2.0 is for the spin
+                    k_sum = 2.0*(1.0/(Grid_K)^2)^3*k_sum ## 2.0 is for the spin
                     push!(Matsubara_array_susceptibility,k_sum)
                     write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
                     close(f)
                 end
             end
             tot_susceptibility = (2.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
-            println("total Susceptibility for q = $(q): ", tot_susceptibility)
-            return tot_susceptibility
+            println("total Susceptibility: ", tot_susceptibility)
+            f = open(filename, "a")
+            write(f, "\n"*"total susceptibility: "*"$(tot_susceptibility)"*"\n")
+            close(f)
         catch err
             if typeof(err) == InterruptException
                 println("ALL THE TASKS HAVE BEEN INTERRUPTED","\n")
