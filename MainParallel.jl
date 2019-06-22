@@ -13,6 +13,7 @@ Grid_K = 200 ## Grid_K = 400 for 2D, as example! 2D case needs parallelization!!
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
 N_it = 5 ## Lowest number is 1: one loop in the process. Converges faster for 2D (~15 iterations) while for 1D slower (~30 iterations).
 Full = false ## If you want to compute the results of all the iterations, set to true. Set to false otherwise!
+Precomputation_enabled = false
 
 filename = "$(Dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn).dat"
 
@@ -85,10 +86,16 @@ qpp_array1D = qp_array1D; k_array1D = qp_array1D; kp_array1D = qp_array1D
 
 ## Boundaries in k-space for the 2D system
 Boundaries2D = Array{Array{Float64,1},1}([[-pi,-pi],[pi,pi]])
-qp_array2D = Array{Array{Float64,1},1}([[a,b] for a in range(-pi,stop=pi,length=Grid_K) for b in range(-pi,stop=pi,length=Grid_K)])
-qpp_array2D = qp_array2D; k_array2D = qp_array2D; kp_array2D = qp_array2D
 
-function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral1D})
+if !Precomputation_enabled
+    qp_array2D = Array{Array{Float64,1},1}([[a,b] for a in range(-pi,stop=pi,length=Grid_K) for b in range(-pi,stop=pi,length=Grid_K)])
+    qpp_array2D = qp_array2D; k_array2D = qp_array2D; kp_array2D = qp_array2D
+else
+    qp_array2D = Array{Array{Float64,1},1}([[a,b] for a in range(1,stop=Grid_K,length=Grid_K) for b in range(1,stop=Grid_K,length=Grid_K)])
+    qpp_array2D = qp_array2D; k_array2D = qp_array2D; kp_array2D = qp_array2D
+end
+
+function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral1D}; precomputedKSpace::Matrix{Float64}=missing)
     if isa(vals, SuperHF.Hubbard.Integral1D)
         #println("In gk_conv 1D")
         for idx in 1:div(SubLast,2)
@@ -98,7 +105,6 @@ function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral
         
         Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk(vals.qx)*SuperHF.Hubbard.II - summation_subs)
         
-        return Gk
     elseif isa(vals, SuperHF.Hubbard.Integral2D)
         #println("In gk_conv 2D")
         for idx in 1:div(SubLast,2)
@@ -106,24 +112,29 @@ function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral
         end
         summation_subs = sum(c_container)
         
-        Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk([vals.qx, vals.qy])*SuperHF.Hubbard.II - summation_subs)
+        if !Precomputation_enabled
+            Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk([vals.qx, vals.qy])*SuperHF.Hubbard.II - summation_subs) ## Supposing dispersion relation is same for all spin projections
+        else
+            Gk = inv(vals.iωn*SuperHF.Hubbard.II - precomputedKSpace[vals.qy,vals.qx]*SuperHF.Hubbard.II - summation_subs)
+        end
     end
+    return Gk
 end
 
 function Lambda(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
-    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D})
+    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}; precomputedKSpace::Matrix{Float64}=missing)
     #println("IN LAMBDA FUNCTION", "\n")
 
-    kernel = inv( 1 - dict["U"]*Gk_conv(Gk1)[1,1]*Gk_conv(Gk2)[2,2] )
+    kernel = inv( 1 - dict["U"]*Gk_conv(Gk1,precomputedKSpace=precomputedKSpace)[1,1]*Gk_conv(Gk2,precomputedKSpace=precomputedKSpace)[2,2] )
 
     #println("kernel value: ", kernel, "\n")
     return kernel
 end
 
 function Susceptibility(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
-    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, Gks::Union{Array{SuperHF.Hubbard.Integral1D,1},Array{SuperHF.Hubbard.Integral2D,1}})
+    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, Gks::Union{Array{SuperHF.Hubbard.Integral1D,1},Array{SuperHF.Hubbard.Integral2D,1}}; precomputedKSpace::Matrix{Float64}=missing)
     #println("IN SUSCEPTIBILITY FUNCTION", "\n")
-    sus = Gk_conv(Gks[1])[1,1]*dict["U"]*Lambda(HF,Gk1,Gk2)*Gk_conv(Gks[2])[2,2]*Gk_conv(Gks[3])[2,2]*Gk_conv(Gks[4])[1,1]
+    sus = Gk_conv(Gks[1],precomputedKSpace=precomputedKSpace)[1,1]*dict["U"]*Lambda(HF,Gk1,Gk2,precomputedKSpace=precomputedKSpace)*Gk_conv(Gks[2],precomputedKSpace=precomputedKSpace)[2,2]*Gk_conv(Gks[3],precomputedKSpace=precomputedKSpace)[2,2]*Gk_conv(Gks[4],precomputedKSpace=precomputedKSpace)[1,1]
 
     #println("Susceptibility: ", sus, "\n\n")
     return sus
@@ -193,24 +204,46 @@ elseif Dims == 2
                 end
                 k_sum = 0.0+0.0im
                 println("iwn: ", iωn)
-                for qp in qp_array2D
-                    println("In qp: ", qp)
-                    for k in k_array2D
-                        println("In k: ", k)
-                        for kp in kp_array2D
-                            #println("In kp: ", kp)
-                            Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], iωn)
-                            Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+q[2], iωn)
-                            Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], iωn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-q[2], iωn)
-                            Matsubara_sus = Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4])
-                            k_sum += Matsubara_sus
+                if !Precomputation_enabled
+                    for qp in qp_array2D
+                        println("In qp: ", qp)
+                        for k in k_array2D
+                            println("In k: ", k)
+                            for kp in kp_array2D
+                                #println("In kp: ", kp)
+                                Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], iωn)
+                                Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+q[2], iωn)
+                                Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], iωn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-q[2], iωn)
+                                Matsubara_sus = Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4])
+                                k_sum += Matsubara_sus
+                            end
                         end
                     end
+                    k_sum = 2.0*(1.0/(Grid_K)^2)^3*k_sum ## 2.0 is for the spin
+                    push!(Matsubara_array_susceptibility,k_sum)
+                    write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
+                    close(f)
+                else
+                    bigMat = SuperHF.Hubbard.BigKArray(SuperHF.Hubbard.epsilonk1, Boundaries2D, Grid_K)
+                    for qp in qp_array2D
+                        #println("In qp: ", qp)
+                        for k in k_array2D
+                            #println("In k: ", k)
+                            for kp in kp_array2D
+                                #println("In kp: ", kp)
+                                Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], iωn)
+                                Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+q[2], iωn)
+                                Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], iωn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-q[2], iωn)
+                                Matsubara_sus = Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4],precomputedKSpace=bigMat)
+                                k_sum += Matsubara_sus
+                            end
+                        end
+                    end
+                    k_sum = 2.0*(1.0/(Grid_K))^3*k_sum ## 2.0 is for the spin
+                    push!(Matsubara_array_susceptibility,k_sum)
+                    write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
+                    close(f)
                 end
-                k_sum = 2.0*(1.0/(Grid_K)^2)^3*k_sum ## 2.0 is for the spin
-                push!(Matsubara_array_susceptibility,k_sum)
-                write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
-                close(f)
             end
             tot_susceptibility = (2.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
             println("total Susceptibility for q = $(q): ", tot_susceptibility)

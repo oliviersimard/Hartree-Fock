@@ -3,12 +3,14 @@ module Hubbard
 using QuadGK
 using Cubature: hcubature
 
+t_ = 0.0; tp_ = -0.3; tpp_ = 0.2
+
 II = Matrix{Float64}([1.0 0.0; 0.0 1.0])
 
 abstract type MyType{N} end
 struct Integral2D <: MyType{2}
-    qx::Float64
-    qy::Float64
+    qx::Union{Float64,Int64}
+    qy::Union{Float64,Int64}
     iωn::Complex{Float64}
 end
 struct Integral1D <: MyType{1}
@@ -47,23 +49,45 @@ function swap(a::Matrix{Complex{T}}) where {T<:Number}
     return tmp_matrix
 end
 
-function epsilonk(kk::Union{Float64,Array{Float64,1}}; t::Float64=1.0, tp::Float64=-0.3, tpp::Float64=0.2)
+function epsilonk1(kx::Float64, ky::Float64, t::Float64)
+    return -2.0*t*(cos(kx) + cos(ky))
+end
+
+function epsilonk2(kx::Float64, ky::Float64, tp::Float64)
+    return -2.0*tp*(cos(kx+ky)+cos(kx-ky))
+end
+
+function epsilonk3(kx::Float64, ky::Float64, tpp::Float64)
+    return -2.0*tpp*(cos(2.0*kx)+cos(2.0*ky))
+end
+
+function epsilonk(kk::Union{Float64,Array{Float64,1}}; t::Float64=t_, tp::Float64=tp_, tpp::Float64=tpp_)
     if isa(kk,Float64)
 
         return -2.0*t*cos(kk)
     elseif isa(kk,Array{Float64,1})
         kx, ky = kk
-        epsilonk1 = -2.0*t*(cos(kx) + cos(ky)) ## Nearest neighbors
-        epsilonk2 = -2.0*tp*(cos(kx+ky)+cos(kx-ky)) ## Second-nearest neighbors
-        epsilonk3 = -2.0*tpp*(cos(2.0*kx)+cos(2.0*ky)) ## Third-nearest neighbors
+        epsilonk1Var = epsilonk1(kx,ky,t) ## Nearest neighbors
+        epsilonk2Var = epsilonk2(kx,ky,tp) ## Second-nearest neighbors
+        epsilonk3Var = epsilonk3(kx,ky,tpp) ## Third-nearest neighbors
 
-        return epsilonk1
+        return epsilonk1Var
     else
 
         throw(ErrorException("Not a type handled. Check epsilonk function!"))
         exit()
     end
 
+end
+
+function BigKArray(funct::Function, Boundaries::Array{Array{Float64,1},1}, Gridk::Int64; t::Float64=t_, tp::Float64=tp_, tpp::Float64=tpp_)
+    tmpMat = Matrix{Float64}(undef,(Gridk,Gridk))
+    for (i,ky) in enumerate(range(Boundaries[1][1],stop=Boundaries[2][1],length=Gridk))
+        for (j,kx) in enumerate(range(Boundaries[1][2],stop=Boundaries[2][2],length=Gridk))
+            tmpMat[i,j] = funct(kx,ky,t) ## Be careful here, because different dispersion relations would lead to mistakes.
+        end
+    end
+    return tmpMat
 end
 
 function initGk(kk::Union{Float64,Array{Float64,1}}, qq::Union{Float64,Array{Float64,1}}, iωn::Complex{Float64})
