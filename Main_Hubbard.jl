@@ -18,7 +18,7 @@ N_it = params["N_it"] ## Lowest number is 1: one loop in the process. Converges 
 ##
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
 
-filename = "$(dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
+filename = "$(dims)D_HF_Susceptibility_calc_plus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
 filenameConv = "$(dims)D_Convergence_Self_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
 dataFolder = pwd()*"/data"; superFilenameConv = dataFolder*"/"*filenameConv
 
@@ -28,7 +28,8 @@ end
 
 if isfile(dataFolder*"/"*filename) || isfile(superFilenameConv)
     try
-        rm(dataFolder*"/"*filename); rm(superFilenameConv)
+        #rm(dataFolder*"/"*filename); 
+        rm(superFilenameConv)
     catch err
         nothing
     end

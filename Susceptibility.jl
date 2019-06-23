@@ -87,7 +87,7 @@ function Lambda(HF::HubbardStruct, Gk1::Union{Integral1D,Integral2D}, Gk2::Union
     dictFunct::Dict{Int64,Array{Array{Complex{Float64},2},1}}; SubLast::Int64=2)
     #println("IN LAMBDA FUNCTION", "\n")
 
-    kernel = inv( 1 - HF.dict_["U"]*Gk_conv(Gk1,c_container,dictFunct,HF.N_it_)[1,1]*Gk_conv(Gk2,c_container,dictFunct,HF.N_it_)[2,2] )
+    kernel = inv( 1 + HF.dict_["U"]*Gk_conv(Gk1,c_container,dictFunct,HF.N_it_)[1,1]*Gk_conv(Gk2,c_container,dictFunct,HF.N_it_)[2,2] )
 
     #println("kernel value: ", kernel, "\n")
     return kernel
