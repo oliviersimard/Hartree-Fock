@@ -6,7 +6,7 @@ using JSON
 paramsJSON = "params.json"
 params = JSON.parsefile(paramsJSON)
 
-## Some important parameters
+## Some important parameters extracted from params.json file.
 dict = Dict{String,Float64}("U" => params["U"], "V" => params["V"])
 beta = params["beta"] # For 1D, beta = 100 and Niωn = 50 seems to converge well. For 1D, opt = "integral" gives results fast enough.
            # For 2D, beta = 200 and Niωn = 50 seems to stabilize efficiently the convergence loop. For 2D, opt = "sum" should be specified. (Incresing gap between beta > Niωn)
@@ -20,10 +20,15 @@ SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be
 
 filename = "$(Dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
 filenameConv = "$(Dims)D_Convergence_Self_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
+dataFolder = pwd()*"/data"
 
-if isfile(filename) || isfile(filenameConv)
+if !isdir(dataFolder)
+    mkdir(dataFolder, mode=0o777)
+end
+
+if isfile(dataFolder*"/"*filename) || isfile(dataFolder*"/"*filenameConv)
     try
-        rm(filename); rm(filenameConv)
+        rm(dataFolder*"/"*filename); rm(dataFolder*"/"*filenameConv)
     catch err
         nothing
     end

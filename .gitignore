@@ -3,3 +3,4 @@
 !Precompile.jl
 !Main_Hubbard.jl
 *.dat
+data
