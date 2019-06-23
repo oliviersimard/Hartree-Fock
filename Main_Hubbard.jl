@@ -18,7 +18,7 @@ N_it = params["N_it"] ## Lowest number is 1: one loop in the process. Converges 
 ##
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
 
-filename = "$(dims)D_HF_Susceptibility_calc_plus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
+filename = "$(dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
 filenameConv = "$(dims)D_Convergence_Self_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
 dataFolder = pwd()*"/data"; superFilenameConv = dataFolder*"/"*filenameConv
 
@@ -68,7 +68,7 @@ try
             println("Length of function array: ", length(dictFunct[N_it]))
             @assert isa(dictFunct,Dict{Int64,Array{Array{Complex{Float64},2},1}}) "Dictionnary holding self-energies must have a given form. Look inside main function."
             Matsubara_array_susceptibility = Array{Complex{Float64},1}()
-            q = 0.
+            q = params["q_1D"]
             @time for (ii,iωn) in enumerate(model.matsubara_grid_)
                 f = open(dataFolder*"/"*filename, "a")
                 if ii == 1
@@ -106,7 +106,7 @@ try
             println("Length of function array: ", length(dictFunct[N_it]))
             @assert isa(dictFunct,Dict{Int64,Array{Array{Complex{Float64},2},1}}) "Dictionnary holding self-energies must have a given form. Look inside main function."
             Matsubara_array_susceptibility = Array{Complex{Float64},1}()
-            q = [0.,0.]
+            q = params["q_2D"]
             @time for (ii,iωn) in enumerate(model.matsubara_grid_)
                 f = open(dataFolder*"/"*filename, "a")
                 if ii == 1

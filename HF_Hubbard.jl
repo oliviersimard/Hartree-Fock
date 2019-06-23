@@ -115,7 +115,7 @@ function FunctWrapper2D(funct::Function, other::Complex{Float64})
 end
 
 function integrateComplex(funct::N, SE_funct::Matrix{Complex{Float64}}, ii::Int64, structModel::HubbardStruct, BoundArr::Union{Array{Float64,1},Array{Array{Float64,1},1}}; 
-    Gridk::Int64=80, opt::String="sum") where {N<:Function}
+    Gridk::Int64=100, opt::String="sum") where {N<:Function}
     U = structModel.dict_["U"]
     if isa(BoundArr,Array{Float64,1})
         if ii <= 1
