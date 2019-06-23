@@ -155,7 +155,6 @@ c_container = Vector{Array{Complex{Float64},2}}(undef,div(SubLast,2))
 dictFunct = dims == 1 ? iterationProcess(model, Boundaries1D, Gridk=Grid_K, opt="integral") : iterationProcess(model, Boundaries2D, Gridk=Grid_K, opt="sum")
 try
     function main()
-        f = open(dataFolder*"/"*filename, "a")
         if dims == 1
             #dictFunct = iterationProcess(model, Boundaries1D, Gridk=Grid_K, opt="integral")
             println("Length of function array: ", length(dictFunct[N_it]))
@@ -163,6 +162,7 @@ try
             Matsubara_array_susceptibility = Array{Complex{Float64},1}()
             q = 0.
             @time for (ii,iωn) in enumerate(model.matsubara_grid_)
+                f = open(dataFolder*"/"*filename, "a")
                 if ii == 1
 	                write(f, "#N_it "*"$(N_it)"*" q="*"$(q)"*" Gridk "*"$(Grid_K)"*"\n")
                 end
@@ -185,9 +185,11 @@ try
                 k_sum = 2.0*(1.0/(Grid_K))^3*k_sum ## 2.0 is for the spin
                 push!(Matsubara_array_susceptibility,k_sum)
                 write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
+                close(f)
             end
             tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
             println("total Susceptibility for q = $(q): ", tot_susceptibility)
+            f = open(dataFolder*"/"*filename, "a")
             write(f, "total susceptibility at q=$(q): "*"$(tot_susceptibility)"*"\n")
             close(f)
             return nothing
@@ -221,9 +223,11 @@ try
                 k_sum = 2.0*(1.0/(Grid_K)^2)^3*k_sum ## 2.0 is for the spin
                 push!(Matsubara_array_susceptibility,k_sum)
                 write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
+                close(f)
             end
             tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
             println("total Susceptibility for q = $(q): ", tot_susceptibility)
+            f = open(dataFolder*"/"*filename, "a")
             write(f, "total susceptibility at q=$(q): "*"$(tot_susceptibility)"*"\n")
             close(f)
             return nothing
