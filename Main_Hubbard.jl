@@ -11,15 +11,15 @@ dict = Dict{String,Float64}("U" => params["U"], "V" => params["V"])
 beta = params["beta"] # For 1D, beta = 100 and Niωn = 50 seems to converge well. For 1D, opt = "integral" gives results fast enough.
            # For 2D, beta = 200 and Niωn = 50 seems to stabilize efficiently the convergence loop. For 2D, opt = "sum" should be specified. (Incresing gap between beta > Niωn)
 Niωn = params["Niwn"] ## Niωn should absolutely be lower than beta value.
-Dims = params["dims"]
+dims = params["dims"]
 Grid_K = params["gridK"] ## Grid_K = 400 for 2D, as example! 2D case needs parallelization!!
 N_it = params["N_it"] ## Lowest number is 1: one loop in the process. Converges faster for 2D (~15 iterations) while for 1D slower (~30 iterations).
 
 ##
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
 
-filename = "$(Dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
-filenameConv = "$(Dims)D_Convergence_Self_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
+filename = "$(dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
+filenameConv = "$(dims)D_Convergence_Self_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
 dataFolder = pwd()*"/data"
 
 if !isdir(dataFolder)
@@ -54,7 +54,7 @@ function iterationProcess(structModel::SuperHF.Hubbard.HubbardStruct, BoundArr::
     N_it = structModel.N_it_
     SE_funct = missing
     dictArray = Dict{Int64,Array{Array{Complex{Float64},2},1}}()
-    f = open(filenameConv, "a")
+    f = open(dataFolder*"/"*filenameConv, "a")
     if isa(BoundArr,Array{Float64,1})
         for it in 1:N_it    
             Funct_array = Array{Array{Complex{Float64},2},1}([]) ## SubLast has got to be devided in two, because there are two boundaries.
@@ -151,16 +151,18 @@ end
 
 ### Main 
 c_container = Vector{Array{Complex{Float64},2}}(undef,div(SubLast,2))
-if Dims == 1
-    dictFunct = iterationProcess(model, Boundaries1D, Gridk=Grid_K, opt="integral")
-    println("Length of function array: ", length(dictFunct[N_it]))
+@assert (dims in [1,2]) "dims must be 1 or 2. Only these dimensions have been implemented."
+dictFunct = dims == 1 ? iterationProcess(model, Boundaries1D, Gridk=Grid_K, opt="integral") : iterationProcess(model, Boundaries2D, Gridk=Grid_K, opt="sum")
+try
     function main()
-        try
+        f = open(dataFolder*"/"*filename, "a")
+        if dims == 1
+            #dictFunct = iterationProcess(model, Boundaries1D, Gridk=Grid_K, opt="integral")
+            println("Length of function array: ", length(dictFunct[N_it]))
             @assert isa(dictFunct,Dict{Int64,Array{Array{Complex{Float64},2},1}}) "Dictionnary holding self-energies must have a given form. Look inside main function."
             Matsubara_array_susceptibility = Array{Complex{Float64},1}()
             q = 0.
             @time for (ii,iωn) in enumerate(model.matsubara_grid_)
-                f = open(filename, "a")
                 if ii == 1
 	                write(f, "#N_it "*"$(N_it)"*" q="*"$(q)"*" Gridk "*"$(Grid_K)"*"\n")
                 end
@@ -183,31 +185,20 @@ if Dims == 1
                 k_sum = 2.0*(1.0/(Grid_K))^3*k_sum ## 2.0 is for the spin
                 push!(Matsubara_array_susceptibility,k_sum)
                 write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
-                close(f)
             end
             tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
             println("total Susceptibility for q = $(q): ", tot_susceptibility)
-            return tot_susceptibility
-        catch err
-            if typeof(err) == InterruptException
-                println("ALL THE TASKS HAVE BEEN INTERRUPTED","\n")
-            else
-                println(err)
-            end
-        end
-        println("Program terminated. Have a nice day!")
-        return nothing
-    end
-elseif Dims == 2
-    dictFunct = iterationProcess(model, Boundaries2D, Gridk=Grid_K, opt="sum")
-    println("Length of function array: ", length(dictFunct[N_it]))
-    function main()
-        try
+            write(f, "total susceptibility at q=$(q): "*"$(tot_susceptibility)"*"\n")
+            close(f)
+            return nothing
+        elseif dims == 2
+            #dictFunct = iterationProcess(model, Boundaries2D, Gridk=Grid_K, opt="sum")
+            println("Length of function array: ", length(dictFunct[N_it]))
             @assert isa(dictFunct,Dict{Int64,Array{Array{Complex{Float64},2},1}}) "Dictionnary holding self-energies must have a given form. Look inside main function."
             Matsubara_array_susceptibility = Array{Complex{Float64},1}()
             q = [0.,0.]
             @time for (ii,iωn) in enumerate(model.matsubara_grid_)
-                f = open(filename, "a")
+                f = open(dataFolder*"/"*filename, "a")
                 if ii == 1
 	                write(f, "#N_it "*"$(N_it)"*" q="*"$(q)"*" Gridk "*"$(Grid_K)"*"\n")
                 end
@@ -230,22 +221,23 @@ elseif Dims == 2
                 k_sum = 2.0*(1.0/(Grid_K)^2)^3*k_sum ## 2.0 is for the spin
                 push!(Matsubara_array_susceptibility,k_sum)
                 write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
-                close(f)
             end
             tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
             println("total Susceptibility for q = $(q): ", tot_susceptibility)
-            return tot_susceptibility
-        catch err
-            if typeof(err) == InterruptException
-                println("ALL THE TASKS HAVE BEEN INTERRUPTED","\n")
-            else
-                println(err)
-            end
+            write(f, "total susceptibility at q=$(q): "*"$(tot_susceptibility)"*"\n")
+            close(f)
+            return nothing
         end
-        println("Program terminated. Have a nice day!")
-        return nothing
     end
-end
 
-main()
+    main() ## Running main() here
+
+catch err
+    if typeof(err) == InterruptException
+        println("ALL THE TASKS HAVE BEEN INTERRUPTED","\n")
+    else
+        println(err)
+    end
+    println("Program terminated. Have a nice day!")
+end
 
