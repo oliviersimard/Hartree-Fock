@@ -1,23 +1,32 @@
 ## Main translation unit
 # Need to include Precompile.jl before running this unit
-#using Distributed
+using JSON
+
+## Reading JSON file
+paramsJSON = "params.json"
+params = JSON.parsefile(paramsJSON)
 
 ## Some important parameters
-dict = Dict{String,Float64}("U" => 4.0, "V" => 1.0)
-beta = 200 # For 1D, beta = 100 and Niωn = 50 seems to converge well. For 1D, opt = "integral" gives results fast enough.
+dict = Dict{String,Float64}("U" => params["U"], "V" => params["V"])
+beta = params["beta"] # For 1D, beta = 100 and Niωn = 50 seems to converge well. For 1D, opt = "integral" gives results fast enough.
            # For 2D, beta = 200 and Niωn = 50 seems to stabilize efficiently the convergence loop. For 2D, opt = "sum" should be specified. (Incresing gap between beta > Niωn)
-Niωn = 50 ## Niωn should absolutely be lower than beta value.
-Dims = 2
-Grid_K = 200 ## Grid_K = 400 for 2D, as example! 2D case needs parallelization!!
+Niωn = params["Niwn"] ## Niωn should absolutely be lower than beta value.
+Dims = params["dims"]
+Grid_K = params["gridK"] ## Grid_K = 400 for 2D, as example! 2D case needs parallelization!!
+N_it = params["N_it"] ## Lowest number is 1: one loop in the process. Converges faster for 2D (~15 iterations) while for 1D slower (~30 iterations).
+
 ##
 SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be fed to different cores
-N_it = 5 ## Lowest number is 1: one loop in the process. Converges faster for 2D (~15 iterations) while for 1D slower (~30 iterations).
-Full = false ## If you want to compute the results of all the iterations, set to true. Set to false otherwise!
 
-filename = "$(Dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn).dat"
+filename = "$(Dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
+filenameConv = "$(Dims)D_Convergence_Self_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
 
-if isfile(filename)
-    rm(filename)
+if isfile(filename) || isfile(filenameConv)
+    try
+        rm(filename); rm(filenameConv)
+    catch err
+        nothing
+    end
 end
 
 
@@ -40,6 +49,7 @@ function iterationProcess(structModel::SuperHF.Hubbard.HubbardStruct, BoundArr::
     N_it = structModel.N_it_
     SE_funct = missing
     dictArray = Dict{Int64,Array{Array{Complex{Float64},2},1}}()
+    f = open(filenameConv, "a")
     if isa(BoundArr,Array{Float64,1})
         for it in 1:N_it    
             Funct_array = Array{Array{Complex{Float64},2},1}([]) ## SubLast has got to be devided in two, because there are two boundaries.
@@ -55,8 +65,10 @@ function iterationProcess(structModel::SuperHF.Hubbard.HubbardStruct, BoundArr::
                 push!(Funct_array, SuperHF.Hubbard.integrateComplex(SuperHF.Hubbard.Gk, dictArray[it-1][1], it, structModel, arrBoundaries, Gridk=Gridk, opt=opt))
             end
             println("Funct_arr: ", Funct_array)
+            write(f, "$(it): "*"$(Funct_array)"*"\n")
             dictArray[it] = Funct_array
         end
+        close(f)
     elseif isa(BoundArr,Array{Array{Float64,1},1})
         for it in 1:N_it    
             Funct_array = Array{Array{Complex{Float64},2},1}([]) ## SubLast has got to be devided in two, because there are two boundaries.
@@ -69,8 +81,10 @@ function iterationProcess(structModel::SuperHF.Hubbard.HubbardStruct, BoundArr::
                 push!(Funct_array, SuperHF.Hubbard.integrateComplex(SuperHF.Hubbard.Gk, dictArray[it-1][1], it, structModel, BoundArr, Gridk=Gridk, opt=opt))
             end
             println("Funct_arr: ", Funct_array)
+            write(f, "$(it): "*"$(Funct_array)"*"\n")
             dictArray[it] = Funct_array
         end
+        close(f)
     end
     return dictArray
 end
@@ -166,14 +180,14 @@ if Dims == 1
                 write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
                 close(f)
             end
-            tot_susceptibility = (2.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
+            tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
             println("total Susceptibility for q = $(q): ", tot_susceptibility)
             return tot_susceptibility
         catch err
             if typeof(err) == InterruptException
                 println("ALL THE TASKS HAVE BEEN INTERRUPTED","\n")
             else
-                println("$(err)")
+                println(err)
             end
         end
         println("Program terminated. Have a nice day!")
@@ -213,14 +227,14 @@ elseif Dims == 2
                 write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
                 close(f)
             end
-            tot_susceptibility = (2.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
+            tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
             println("total Susceptibility for q = $(q): ", tot_susceptibility)
             return tot_susceptibility
         catch err
             if typeof(err) == InterruptException
                 println("ALL THE TASKS HAVE BEEN INTERRUPTED","\n")
             else
-                println("$(err)")
+                println(err)
             end
         end
         println("Program terminated. Have a nice day!")
