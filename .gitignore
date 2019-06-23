@@ -2,5 +2,6 @@
 !*HF*.jl
 !Precompile.jl
 !Main_Hubbard.jl
+!Susceptibility.jl
 *.dat
 data
