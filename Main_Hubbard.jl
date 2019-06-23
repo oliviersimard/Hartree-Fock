@@ -20,15 +20,15 @@ SubLast = 2 ## Subdivision of last integral (N_it) to be split in #Sublast to be
 
 filename = "$(dims)D_HF_Susceptibility_calc_minus_sign_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
 filenameConv = "$(dims)D_Convergence_Self_kGrid_$(Grid_K)_N_it_$(N_it)_beta_$(beta)_Niwn_$(Niωn)_U_$(dict["U"]).dat"
-dataFolder = pwd()*"/data"
+dataFolder = pwd()*"/data"; superFilenameConv = dataFolder*"/"*filenameConv
 
 if !isdir(dataFolder)
     mkdir(dataFolder, mode=0o777)
 end
 
-if isfile(dataFolder*"/"*filename) || isfile(dataFolder*"/"*filenameConv)
+if isfile(dataFolder*"/"*filename) || isfile(superFilenameConv)
     try
-        rm(dataFolder*"/"*filename); rm(dataFolder*"/"*filenameConv)
+        rm(dataFolder*"/"*filename); rm(superFilenameConv)
     catch err
         nothing
     end
@@ -40,59 +40,6 @@ end
 include("Precompile.jl")
 using .SuperHF
 
-function integrateComplex1DWrapper(SE_funct::Function, ii::Int64, structModel::SuperHF.Hubbard.HubbardStruct, BoundArr::Array{Float64,1}, Gridk::Int64, opt::String)
-    function tmp_funct(funct::Function)
-        return SuperHF.Hubbard.integrateComplex(funct::Function, SE_funct, ii, structModel, BoundArr, Gridk, opt)
-    end
-    return tmp_funct
-end
-
-
-function iterationProcess(structModel::SuperHF.Hubbard.HubbardStruct, BoundArr::Union{Array{Float64,1}, Array{Array{Float64,1},1}}; 
-    SubLast::Int64=SubLast, Gridk::Int64=100, opt::String="sum")
-    @assert (isa(BoundArr,Array{Array{Float64,1},1}) || isa(BoundArr,Array{Float64,1})) "Only treats the 1D and 2D cases for now! Check iterationProcess(...)."
-    N_it = structModel.N_it_
-    SE_funct = missing
-    dictArray = Dict{Int64,Array{Array{Complex{Float64},2},1}}()
-    f = open(dataFolder*"/"*filenameConv, "a")
-    if isa(BoundArr,Array{Float64,1})
-        for it in 1:N_it    
-            Funct_array = Array{Array{Complex{Float64},2},1}([]) ## SubLast has got to be devided in two, because there are two boundaries.
-            arrBoundaries = range(BoundArr[1],stop=BoundArr[2],length=SubLast) |> collect
-            @assert (mod(length(arrBoundaries),2) == 0) "The value of SubLast must be an even number!"
-            arrBoundaries = reshape( arrBoundaries, ( div( length(arrBoundaries), 2 ), 2 ) )[1,:]
-            if it <= 1
-                dummyMatrix = Matrix{Complex{Float64}}(undef,(2,2))
-                println(it, " iteration_process 1D ", "Boundaries1D: ", arrBoundaries)
-                push!(Funct_array, SuperHF.Hubbard.integrateComplex(SuperHF.Hubbard.initGk, dummyMatrix, it, structModel, arrBoundaries, Gridk=Gridk, opt=opt))
-            elseif it > 1
-                println(it, " iteration_process 1D ", "Boundaries1D: ", arrBoundaries)
-                push!(Funct_array, SuperHF.Hubbard.integrateComplex(SuperHF.Hubbard.Gk, dictArray[it-1][1], it, structModel, arrBoundaries, Gridk=Gridk, opt=opt))
-            end
-            println("Funct_arr: ", Funct_array)
-            write(f, "$(it): "*"$(Funct_array)"*"\n")
-            dictArray[it] = Funct_array
-        end
-        close(f)
-    elseif isa(BoundArr,Array{Array{Float64,1},1})
-        for it in 1:N_it    
-            Funct_array = Array{Array{Complex{Float64},2},1}([]) ## SubLast has got to be devided in two, because there are two boundaries.
-            if it <= 1
-                dummyMatrix = Matrix{Complex{Float64}}(undef,(2,2))
-                println(it, " iteration_process 2D ", "Boundaries2D: ", BoundArr[1][1], " ", Gridk, " ", BoundArr[2][1])
-                push!(Funct_array, SuperHF.Hubbard.integrateComplex(SuperHF.Hubbard.initGk, dummyMatrix, it, structModel, BoundArr, Gridk=Gridk, opt=opt))
-            elseif it > 1
-                println(it, " iteration_process 2D ", "Boundaries2D: ", BoundArr)
-                push!(Funct_array, SuperHF.Hubbard.integrateComplex(SuperHF.Hubbard.Gk, dictArray[it-1][1], it, structModel, BoundArr, Gridk=Gridk, opt=opt))
-            end
-            println("Funct_arr: ", Funct_array)
-            write(f, "$(it): "*"$(Funct_array)"*"\n")
-            dictArray[it] = Funct_array
-        end
-        close(f)
-    end
-    return dictArray
-end
 
 ## Instantiating HubbardStruct for forthcoming calculations
 model = SuperHF.Hubbard.HubbardStruct(Niωn, dict, N_it, beta)
@@ -107,52 +54,12 @@ Boundaries2D = Array{Array{Float64,1},1}([[-pi,-pi],[pi,pi]])
 qp_array2D = Array{Array{Float64,1},1}([[a,b] for a in range(-pi,stop=pi,length=Grid_K) for b in range(-pi,stop=pi,length=Grid_K)])
 qpp_array2D = qp_array2D; k_array2D = qp_array2D; kp_array2D = qp_array2D
 
-function Gk_conv(vals::Union{SuperHF.Hubbard.Integral2D,SuperHF.Hubbard.Integral1D})
-    if isa(vals, SuperHF.Hubbard.Integral1D)
-        #println("In gk_conv 1D")
-        for idx in 1:div(SubLast,2)
-            c_container[idx] = dictFunct[N_it][idx]
-        end
-        summation_subs = sum(c_container)
-        
-        Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk(vals.qx)*SuperHF.Hubbard.II - summation_subs)
-        
-    elseif isa(vals, SuperHF.Hubbard.Integral2D)
-        #println("In gk_conv 2D")
-        for idx in 1:div(SubLast,2)
-            c_container[idx] = dictFunct[N_it][idx]
-        end
-        summation_subs = sum(c_container)
-        
-        Gk = inv(vals.iωn*SuperHF.Hubbard.II - SuperHF.Hubbard.epsilonk([vals.qx, vals.qy])*SuperHF.Hubbard.II - summation_subs)
-    end
-
-    return Gk
-end
-
-function Lambda(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
-    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D})
-    #println("IN LAMBDA FUNCTION", "\n")
-
-    kernel = inv( 1 - dict["U"]*Gk_conv(Gk1)[1,1]*Gk_conv(Gk2)[2,2] )
-
-    #println("kernel value: ", kernel, "\n")
-    return kernel
-end
-
-function Susceptibility(HF::SuperHF.Hubbard.HubbardStruct, Gk1::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, 
-    Gk2::Union{SuperHF.Hubbard.Integral1D,SuperHF.Hubbard.Integral2D}, Gks::Union{Array{SuperHF.Hubbard.Integral1D,1},Array{SuperHF.Hubbard.Integral2D,1}})
-    #println("IN SUSCEPTIBILITY FUNCTION", "\n")
-    sus = Gk_conv(Gks[1])[1,1]*dict["U"]*Lambda(HF,Gk1,Gk2)*Gk_conv(Gks[2])[2,2]*Gk_conv(Gks[3])[2,2]*Gk_conv(Gks[4])[1,1]
-
-    #println("Susceptibility: ", sus, "\n\n")
-    return sus
-end
 
 ### Main 
 c_container = Vector{Array{Complex{Float64},2}}(undef,div(SubLast,2))
 @assert (dims in [1,2]) "dims must be 1 or 2. Only these dimensions have been implemented."
-dictFunct = dims == 1 ? iterationProcess(model, Boundaries1D, Gridk=Grid_K, opt="integral") : iterationProcess(model, Boundaries2D, Gridk=Grid_K, opt="sum")
+dictFunct = dims == 1 ? SuperHF.Sus.iterationProcess(model, Boundaries1D, superFilenameConv, Gridk=Grid_K, opt="integral") : SuperHF.Sus.iterationProcess(model, Boundaries2D, superFilenameConv, Gridk=Grid_K, opt="sum")
+println("dictFunct: ", dictFunct)
 try
     function main()
         if dims == 1
@@ -177,7 +84,7 @@ try
                             Gk1 = SuperHF.Hubbard.Integral1D(k, iωn); Gk2 = SuperHF.Hubbard.Integral1D(kp+qp, iωn)
                             Gks1 = SuperHF.Hubbard.Integral1D(k, iωn); Gks2 = SuperHF.Hubbard.Integral1D(kp+q, iωn)
                             Gks3 = SuperHF.Hubbard.Integral1D(kp, iωn); Gks4 = SuperHF.Hubbard.Integral1D(k-q, iωn)
-                            Matsubara_sus = Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4])
+                            Matsubara_sus = SuperHF.Sus.Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4],c_container,dictFunct)
                             k_sum += Matsubara_sus
                         end
                     end
@@ -215,7 +122,7 @@ try
                             Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], iωn)
                             Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], iωn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+q[2], iωn)
                             Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], iωn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-q[2], iωn)
-                            Matsubara_sus = Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4])
+                            Matsubara_sus = SuperHF.Sus.Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4],c_container,dictFunct)
                             k_sum += Matsubara_sus
                         end
                     end

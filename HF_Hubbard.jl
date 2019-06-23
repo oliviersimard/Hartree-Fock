@@ -39,6 +39,8 @@ function matsubaraGrid(N_iωn_::Int64, beta_::Int64)
     return matsubara_grid_
 end
 
+export HubbardStruct, MyType, Integral1D, Integral2D ## Intended to be public
+
 function swap(a::Matrix{Complex{T}}) where {T<:Number}
     tmp_matrix = Matrix{Complex{T}}(undef,(2,2))
     tmp_matrix[1,1] = a[2,2]; tmp_matrix[2,2] = a[1,1]
