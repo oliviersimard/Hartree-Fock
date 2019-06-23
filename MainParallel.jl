@@ -221,7 +221,7 @@ elseif Dims == 2
                 if !Precomputation_enabled
                     for qp in qp_array2D
                         println("In qp: ", qp)
-                        for k in k_array2D
+                        @time for k in k_array2D
                             println("In k: ", k)
                             for kp in kp_array2D
                                 #println("In kp: ", kp)
@@ -242,7 +242,7 @@ elseif Dims == 2
                     bigMat = SuperHF.Hubbard.BigKArray(SuperHF.Hubbard.epsilonk1, Boundaries2D, Grid_K)
                     for qp in qp_array2D
                         println("In qp: ", qp)
-                        for k in k_array2D
+                        @time for k in k_array2D
                             println("In k: ", k)
                             for kp in kp_array2D
                                 #println("In kp: ", kp)
