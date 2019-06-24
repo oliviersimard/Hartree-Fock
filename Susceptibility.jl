@@ -12,6 +12,18 @@ function integrateComplex1DWrapper(SE_funct::Function, ii::Int64, structModel::H
     return tmp_funct
 end
 
+function custom_mod(num::Int64,Gridk::Int64) ## Can be useful in the case where one precomputes the k-space values of the dispersion relation.
+    tmpNum = num ## Can't modify the content of struct, because immutable.
+    if mod(num,Gridk+1) == 0
+        tmpNum=1
+    end
+    if num < 0 || num > Gridk+1
+        tmpNum = mod(num,Gridk+1) + 1
+    end
+
+    return tmpNum
+end
+
 
 function iterationProcess(structModel::Sus.HubbardStruct, BoundArr::Union{Array{Float64,1}, Array{Array{Float64,1},1}}, filename::String; 
     SubLast::Int64=2, Gridk::Int64=100, opt::String="sum")
@@ -60,7 +72,7 @@ function iterationProcess(structModel::Sus.HubbardStruct, BoundArr::Union{Array{
 end
 
 function Gk_conv(vals::Union{Integral2D,Integral1D}, c_container::Vector{Array{Complex{Float64},2}}, dictFunct::Dict{Int64,Array{Array{Complex{Float64},2},1}}, N_it::Int64; 
-    SubLast::Int64=2)
+    SubLast::Int64=2, precomputedSpace=missing, precom_enabled::Bool=false, Gridk::Int64=0)
     if isa(vals, Integral1D)
         #println("In gk_conv 1D")
         for idx in 1:div(SubLast,2)
@@ -76,27 +88,47 @@ function Gk_conv(vals::Union{Integral2D,Integral1D}, c_container::Vector{Array{C
             c_container[idx] = dictFunct[N_it][idx]
         end
         summation_subs = sum(c_container)
-        
-        Gk = inv(vals.iωn*II - epsilonk([vals.qx, vals.qy])*II - summation_subs)
+        if !precom_enabled
+            Gk = inv(vals.iωn*II - epsilonk([vals.qx, vals.qy])*II - summation_subs)
+        else
+            Gk = inv(vals.iωn*II - precomputedSpace[custom_mod(vals.qy,Gridk),custom_mod(vals.qx,Gridk)]*II - summation_subs)
+        end
     end
 
     return Gk
 end
 
 function Lambda(HF::HubbardStruct, Gk1::Union{Integral1D,Integral2D}, Gk2::Union{Integral1D,Integral2D}, c_container::Vector{Array{Complex{Float64},2}}, 
-    dictFunct::Dict{Int64,Array{Array{Complex{Float64},2},1}}; SubLast::Int64=2)
+    dictFunct::Dict{Int64,Array{Array{Complex{Float64},2},1}}; SubLast::Int64=2, precomputedSpace=missing, precom_enabled::Bool=false, Gridk::Int64=0)
     #println("IN LAMBDA FUNCTION", "\n")
 
-    kernel = inv( 1 - HF.dict_["U"]*Gk_conv(Gk1,c_container,dictFunct,HF.N_it_)[1,1]*Gk_conv(Gk2,c_container,dictFunct,HF.N_it_)[2,2] )
+    kernel = inv( 
+        1 - HF.dict_["U"]*Gk_conv(
+            Gk1,c_container,dictFunct,HF.N_it_,precomputedSpace=precomputedSpace,precom_enabled=precom_enabled,Gridk=Gridk
+            )[1,1]*Gk_conv(
+                Gk2,c_container,dictFunct,HF.N_it_,precomputedSpace=precomputedSpace,precom_enabled=precom_enabled,Gridk=Gridk
+                )[2,2] 
+                )
 
     #println("kernel value: ", kernel, "\n")
     return kernel
 end
 
 function Susceptibility(HF::HubbardStruct, Gk1::Union{Integral1D,Integral2D}, Gk2::Union{Integral1D,Integral2D}, 
-    Gks::Union{Array{Integral1D,1},Array{Integral2D,1}}, c_container::Vector{Array{Complex{Float64},2}}, dictFunct::Dict{Int64,Array{Array{Complex{Float64},2},1}}; SubLast::Int64=2)
+    Gks::Union{Array{Integral1D,1},Array{Integral2D,1}}, c_container::Vector{Array{Complex{Float64},2}}, dictFunct::Dict{Int64,Array{Array{Complex{Float64},2},1}}; 
+    SubLast::Int64=2, precomputedSpace=missing, precom_enabled::Bool=false, Gridk::Int64=0)
     #println("IN SUSCEPTIBILITY FUNCTION", "\n")
-    sus = Gk_conv(Gks[1],c_container,dictFunct,HF.N_it_)[1,1]*HF.dict_["U"]*Lambda(HF,Gk1,Gk2,c_container,dictFunct)*Gk_conv(Gks[2],c_container,dictFunct,HF.N_it_)[2,2]*Gk_conv(Gks[3],c_container,dictFunct,HF.N_it_)[2,2]*Gk_conv(Gks[4],c_container,dictFunct,HF.N_it_)[1,1]
+    sus = Gk_conv(
+        Gks[1],c_container,dictFunct,HF.N_it_,precomputedSpace=precomputedSpace,precom_enabled=precom_enabled,Gridk=Gridk
+                )[1,1]*HF.dict_["U"]*Lambda(
+                                            HF,Gk1,Gk2,c_container,dictFunct,precomputedSpace=precomputedSpace,precom_enabled=precom_enabled,Gridk=Gridk
+                                        )*Gk_conv(
+                                                    Gks[2],c_container,dictFunct,HF.N_it_,precomputedSpace=precomputedSpace,precom_enabled=precom_enabled,Gridk=Gridk
+                                                )[2,2]*Gk_conv(
+                                                            Gks[3],c_container,dictFunct,HF.N_it_,precomputedSpace=precomputedSpace,precom_enabled=precom_enabled,Gridk=Gridk
+                                                        )[2,2]*Gk_conv(
+                                                                        Gks[4],c_container,dictFunct,HF.N_it_,precomputedSpace=precomputedSpace,precom_enabled=precom_enabled,Gridk=Gridk
+                                                                    )[1,1]
 
     #println("Susceptibility: ", sus, "\n\n")
     return sus
