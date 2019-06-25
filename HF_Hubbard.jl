@@ -3,9 +3,9 @@ module Hubbard
 using QuadGK
 using Cubature: hcubature
 
-t_=1.0; tp_=-0.3; tpp_=0.2 #YBCO
+const t_=1.0; const tp_=-0.3; const tpp_=0.2 #YBCO
 
-II = Matrix{Float64}([1.0 0.0; 0.0 1.0])
+const II = Matrix{Float64}([1.0 0.0; 0.0 1.0])
 
 abstract type MyType{N} end
 struct Integral2D <: MyType{2}
