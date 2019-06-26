@@ -2,7 +2,7 @@
 # Need to include Precompile.jl before running this unit
 using Distributed
 
-N_procs = 4
+const N_procs = 8
 @assert N_procs <= Base.Sys.CPU_THREADS "The number of workers must not exceed the amount of processors available."
 addprocs(N_procs)
 
@@ -70,17 +70,50 @@ elseif precomputed_enabled && dims == 2
     @everywhere k_array2D = qp_array2D; @everywhere kp_array2D = qp_array2D
 end 
 
+function f_pmap(f::Function, model::SuperHF.Hubbard.HubbardStruct)
+    np = nworkers()
+    println("nworkers: ", nworkers())
+    Matsubara_array_susceptibility = SharedArray{Complex{Float64},1}(model.N_iωn_)
+    fil = open(dataFolder*"/"*filename, "a")
+    i=1
+    nextidx() = (idx = i; i+=1; idx)
+
+    @sync begin
+        for pid = 1:np
+            if pid != myid() || np == 1
+                @async begin
+                    while true
+                        idx = nextidx()
+                        if idx == 1
+                            write(fil, "#N_it "*"$(model.N_it_)"*" q="*"$(qq)"*" Gridk "*"$(Grid_K)"*"\n")
+                        end
+                        if idx > model.N_iωn_
+                            break
+                        end
+                        Matsubara_array_susceptibility[idx] = remotecall_fetch(f, pid, model.matsubara_grid_[idx])
+                        println("iwn: ", model.matsubara_grid_[idx], "   ", Matsubara_array_susceptibility[idx])
+                        write(fil, "$(model.matsubara_grid_[idx])"*"\t\t"*"$(Matsubara_array_susceptibility[idx])"*"\n")
+                    end
+                end
+            end
+        end
+    end
+    close(fil)
+    return Matsubara_array_susceptibility
+end
+
 ### Main 
 @assert (dims in [1,2]) "dims must be 1 or 2. Only these dimensions have been implemented."
 @everywhere dictFunct = dims == 1 ? SuperHF.Sus.iterationProcess(model, Boundaries1D, superFilenameConv, Gridk=Grid_K, opt="integral") : SuperHF.Sus.iterationProcess(model, Boundaries2D, superFilenameConv, Gridk=Grid_K, opt="sum")
 try
     function main()
+        funct_to_use = missing
         if dims == 1
             println("Length of function array: ", length(dictFunct[N_it]))
             @assert isa(dictFunct,Dict{Int64,Array{Array{Complex{Float64},2},1}}) "Dictionnary holding self-energies must have a given form. Look inside main function."
             @everywhere qq = params["q_1D"]
 
-            @everywhere function oneDSpinSus(iωn::Complex{Float64})
+            @everywhere @time function oneDSpinSus(iωn::Complex{Float64})
                 k_sum = 0.0 + 0.0im
                 c_container = Vector{Array{Complex{Float64},2}}(undef,div(SubLast,2))
                 for iqpn in model.matsubara_grid_bosons_
@@ -103,73 +136,27 @@ try
                 return 2.0*(1.0/(Grid_K))^3*k_sum
             end
 
+            funct_to_use = oneDSpinSus
 
-            function f_pmap(f::Function, model::SuperHF.Hubbard.HubbardStruct)
-                np = nworkers()
-                println("nworkers: ", nworkers())
-                Matsubara_array_susceptibility = SharedArray{Complex{Float64},1}(model.N_iωn_)
-                fil = open(dataFolder*"/"*filename, "a")
-                i=1
-                nextidx() = (idx = i; i+=1; idx)
-
-                @sync begin
-                    for pid = 1:np
-                        if pid != myid() || np == 1
-                            @async begin
-                                while true
-                                    idx = nextidx()
-                                    #println("idx: ", idx)
-                                    if idx == 1
-                                        write(fil, "#N_it "*"$(model.N_it_)"*" q="*"$(qq)"*" Gridk "*"$(Grid_K)"*"\n")
-                                    end
-                                    if idx > model.N_iωn_
-                                        break
-                                    end
-                                    Matsubara_array_susceptibility[idx] = remotecall_fetch(f, pid, model.matsubara_grid_[idx])
-                                    println("iwn: ", model.matsubara_grid_[idx], "   ", Matsubara_array_susceptibility[idx])
-                                    write(fil, "$(model.matsubara_grid_[idx])"*"\t\t"*"$(Matsubara_array_susceptibility[idx])"*"\n")
-                                end
-                            end
-                        end
-                    end
-                end
-                close(fil)
-                return Matsubara_array_susceptibility
-            end
-            Matsubara_array_susceptibility = f_pmap(oneDSpinSus,model)
-            tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
-            println("total Susceptibility for q = $(qq): ", tot_susceptibility)
-            f = open(dataFolder*"/"*filename, "a")
-            write(f, "total susceptibility at q=$(qq): "*"$(tot_susceptibility)"*"\n")
-            close(f)
-            return nothing
         elseif dims == 2
-            #dictFunct = iterationProcess(model, Boundaries2D, Gridk=Grid_K, opt="sum")
             println("Length of function array: ", length(dictFunct[N_it]))
             @assert isa(dictFunct,Dict{Int64,Array{Array{Complex{Float64},2},1}}) "Dictionnary holding self-energies must have a given form. Look inside main function."
-            Matsubara_array_susceptibility = Array{Complex{Float64},1}()
-            c_container = Vector{Array{Complex{Float64},2}}(undef,div(SubLast,2))
+
             if !precomputed_enabled
-                q = params["q_2D"]
-                @time for (ii,iωn) in enumerate(model.matsubara_grid_)
-                    f = open(dataFolder*"/"*filename, "a")
-                    if ii == 1
-	                    write(f, "#N_it "*"$(N_it)"*" q="*"$(q)"*" Gridk "*"$(Grid_K)"*"\n")
-                    end
-                    k_sum = 0.0+0.0im
-                    println("iwn: ", iωn)
+                @everywhere qq = params["q_2D"]
+
+                @everywhere @time function twoDSpinSus(iωn::Complex{Float64})
+                    k_sum = 0.0 + 0.0im
+                    c_container = Vector{Array{Complex{Float64},2}}(undef,div(SubLast,2))
                     for iqpn in model.matsubara_grid_bosons_
                         for qp in qp_array2D
-                            println("In qp: ", qp)
                             for ikn in model.matsubara_grid_
                                 for k in k_array2D
-                                    #println("In k: ", k)
                                     for ikpn in model.matsubara_grid_
                                         for kp in kp_array2D
-                                            #println("In kp: ", kp)
                                             Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], ikn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], ikpn+iqpn)
-                                            Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], ikn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+q[2], ikpn+iωn)
-                                            Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], ikpn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-q[2], ikpn-iωn)
+                                            Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], ikn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+qq[2], ikpn+iωn)
+                                            Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], ikpn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-qq[2], ikpn-iωn)
                                             Matsubara_sus = SuperHF.Sus.Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4],c_container,dictFunct)
                                             k_sum += Matsubara_sus
                                         end
@@ -178,38 +165,32 @@ try
                             end
                         end
                     end
-                    k_sum = 2.0*(1.0/(Grid_K)^2)^3*k_sum ## 2.0 is for the spin
-                    push!(Matsubara_array_susceptibility,k_sum)
-                    write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
-                    close(f)
+                    return 2.0*(1.0/(Grid_K))^3*k_sum
                 end
-                tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
-                println("total Susceptibility for q = $(q): ", tot_susceptibility)
-                f = open(dataFolder*"/"*filename, "a")
-                write(f, "total susceptibility at q=$(q): "*"$(tot_susceptibility)"*"\n")
-                close(f)
+
+                funct_to_use = twoDSpinSus
+                # Matsubara_array_susceptibility = f_pmap(twoDSpinSus,model)
+                # tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
+                # println("total Susceptibility for q = $(q): ", tot_susceptibility)
+                # f = open(dataFolder*"/"*filename, "a")
+                # write(f, "total susceptibility at q=$(q): "*"$(tot_susceptibility)"*"\n")
+                # close(f)
             else
-                q = [0,0] ## Has to be integer in order to refer to an element of the precomputed k-space. Equivalent to adding the [0.,0.] vector.
-                bigMatSpace = SuperHF.Hubbard.BigKArray(SuperHF.Hubbard.epsilonk1, Boundaries2D, Grid_K)
-                @time for (ii,iωn) in enumerate(model.matsubara_grid_)
-                    f = open(dataFolder*"/"*filename, "a")
-                    if ii == 1
-	                    write(f, "#N_it "*"$(N_it)"*" q="*"$(q)"*" Gridk "*"$(Grid_K)"*"\n")
-                    end
-                    k_sum = 0.0+0.0im
-                    println("iwn: ", iωn)
+                @everywhere q = [0,0] ## Has to be integer in order to refer to an element of the precomputed k-space. Equivalent to adding the [0.,0.] vector.
+                
+                @everywhere @time function twoDSpinSusPrecom(iωn::Complex{Float64})
+                    bigMatSpace = SuperHF.Hubbard.BigKArray(SuperHF.Hubbard.epsilonk1, Boundaries2D, Grid_K)
+                    k_sum = 0.0 + 0.0im
+                    c_container = Vector{Array{Complex{Float64},2}}(undef,div(SubLast,2))
                     for iqpn in model.matsubara_grid_bosons_
                         for qp in qp_array2D
-                            println("In qp: ", qp)
                             for ikn in model.matsubara_grid_
                                 for k in k_array2D
-                                    #println("In k: ", k)
                                     for ikpn in model.matsubara_grid_
                                         for kp in kp_array2D
-                                            #println("In kp: ", kp)
                                             Gk1 = SuperHF.Hubbard.Integral2D(k[1], k[2], ikn); Gk2 = SuperHF.Hubbard.Integral2D(kp[1]+qp[1], kp[2]+qp[2], ikpn+iqpn)
-                                            Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], ikn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+q[2], ikpn+iωn)
-                                            Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], ikpn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-q[2], ikpn-iωn)
+                                            Gks1 = SuperHF.Hubbard.Integral2D(k[1], k[2], ikn); Gks2 = SuperHF.Hubbard.Integral2D(kp[1]+q[1], kp[2]+qq[2], ikpn+iωn)
+                                            Gks3 = SuperHF.Hubbard.Integral2D(kp[1], kp[2], ikpn); Gks4 = SuperHF.Hubbard.Integral2D(k[1]-q[1], k[2]-qq[2], ikpn-iωn)
                                             Matsubara_sus = SuperHF.Sus.Susceptibility(model, Gk1, Gk2, [Gks1,Gks2,Gks3,Gks4],c_container,dictFunct,precomputedSpace=bigMatSpace,precom_enabled=precomputed_enabled,Gridk=Grid_K)
                                             k_sum += Matsubara_sus
                                         end
@@ -218,19 +199,24 @@ try
                             end
                         end
                     end
-                    k_sum = 2.0*(1.0/(Grid_K)^2)^3*k_sum ## 2.0 is for the spin
-                    push!(Matsubara_array_susceptibility,k_sum)
-                    write(f, "$(iωn)"*"\t\t"*"$(k_sum)"*"\n")
-                    close(f)
+                    return 2.0*(1.0/(Grid_K))^3*k_sum
                 end
-                tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
-                println("total Susceptibility for q = $(q): ", tot_susceptibility)
-                f = open(dataFolder*"/"*filename, "a")
-                write(f, "total susceptibility at q=$(q): "*"$(tot_susceptibility)"*"\n")
-                close(f)
-            return nothing
+                
+                funct_to_use = twoDSpinSusPrecom
+                # Matsubara_array_susceptibility = f_pmap(twoDSpinSusPrecom,model)
+                # tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
+                # println("total Susceptibility for q = $(q): ", tot_susceptibility)
+                # f = open(dataFolder*"/"*filename, "a")
+                # write(f, "total susceptibility at q=$(q): "*"$(tot_susceptibility)"*"\n")
+                # close(f)
             end
         end
+        Matsubara_array_susceptibility = f_pmap(funct_to_use,model)
+        tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
+        println("total Susceptibility for q = $(qq): ", tot_susceptibility)
+        f = open(dataFolder*"/"*filename, "a")
+        write(f, "total susceptibility at q=$(qq): "*"$(tot_susceptibility)"*"\n")
+        close(f)
     end
 
     main() ## Running main() here
