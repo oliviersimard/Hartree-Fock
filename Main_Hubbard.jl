@@ -2,7 +2,7 @@
 # Need to include Precompile.jl before running this unit
 using Distributed
 
-const N_procs = 8
+const N_procs = 1
 @assert N_procs <= Base.Sys.CPU_THREADS "The number of workers must not exceed the amount of processors available."
 addprocs(N_procs)
 
@@ -90,7 +90,7 @@ function f_pmap(f::Function, model::SuperHF.Hubbard.HubbardStruct)
                         if idx > model.N_iωn_
                             break
                         end
-                        Matsubara_array_susceptibility[idx] = remotecall_fetch(f, pid, model.matsubara_grid_[idx])
+                        Matsubara_array_susceptibility[idx] = remotecall_fetch(f, pid, model.matsubara_grid_bosons_[idx])
                         println("iwn: ", model.matsubara_grid_[idx], "   ", Matsubara_array_susceptibility[idx])
                         write(fil, "$(model.matsubara_grid_[idx])"*"\t\t"*"$(Matsubara_array_susceptibility[idx])"*"\n")
                     end
@@ -105,6 +105,7 @@ end
 ### Main 
 @assert (dims in [1,2]) "dims must be 1 or 2. Only these dimensions have been implemented."
 @everywhere dictFunct = dims == 1 ? SuperHF.Sus.iterationProcess(model, Boundaries1D, superFilenameConv, Gridk=Grid_K, opt="integral") : SuperHF.Sus.iterationProcess(model, Boundaries2D, superFilenameConv, Gridk=Grid_K, opt="sum")
+exit(1)
 try
     function main()
         funct_to_use = missing
@@ -201,7 +202,7 @@ try
                     end
                     return 2.0*(1.0/(Grid_K))^3*k_sum
                 end
-                
+
                 funct_to_use = twoDSpinSusPrecom
                 # Matsubara_array_susceptibility = f_pmap(twoDSpinSusPrecom,model)
                 # tot_susceptibility = 2.0*(1.0/model.beta_)^3*sum(Matsubara_array_susceptibility)
